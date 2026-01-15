@@ -5,6 +5,11 @@ from matplotlib.collections import PolyCollection
 from typing import Tuple, List
 import ciexyz31 as cie
 
+
+SHOW_PROJECTION = 1
+SHOW_DECOMPOSITION = 1
+
+
 dynamic_obj = {'3d':[], 'cmf':[], 'xy_plane':[]}
 Vec = Tuple[float, float, float]
 EPS = 1e-12
@@ -124,13 +129,14 @@ def draw_3d_coords(sub_plt):
     x0, x1 = sub_plt.get_xlim()
     y0, y1 = sub_plt.get_ylim()
     z0, z1 = sub_plt.get_zlim()
-    sub_plt.plot([x0, x1], [0, 0], [0, 0], color="black", linewidth=1.6, alpha=0.4)
-    sub_plt.plot([0, 0], [y0, y1], [0, 0], color="black", linewidth=1.6, alpha=0.4)
-    sub_plt.plot([0, 0], [0, 0], [z0, z1], color="black", linewidth=1.6, alpha=0.4)
 
-    sub_plt.set_xlabel("X")
-    sub_plt.set_ylabel("Y")
-    sub_plt.set_zlabel("Z")
+    sub_plt.plot([x0, x1], [0, 0], [0, 0], color="red", linewidth=4, alpha=0.4)
+    sub_plt.plot([0, 0], [y0, y1], [0, 0], color="green", linewidth=4, alpha=0.4)
+    sub_plt.plot([0, 0], [0, 0], [z0, z1], color="blue", linewidth=4, alpha=0.4)
+
+    sub_plt.set_xlabel("R")
+    sub_plt.set_ylabel("G")
+    sub_plt.set_zlabel("B")
 
 
 def draw_scale_plot(sub_plt, pts_all):
@@ -178,10 +184,12 @@ def draw_2d_CMF_plot(ax_2d, points, project_point_i, wavelengths):
 def draw_3d_XYZ_plot_static(points: List[Vec], Hs, R: Vec, G: Vec, B: Vec, project_point_i: int = 0, fig=None, sub_plt=None):
     Zero = (0.0, 0.0, 0.0)
     draw_3d_coords(sub_plt)
-    draw_plane(sub_plt, R, G, B, Zero)
-    draw_points(sub_plt, points, 'pink', '.')
-    draw_points(sub_plt, Hs, 'black', 's')
-    draw_points_curve(sub_plt, points)
+    draw_points(sub_plt, points, 'black', '.')
+    draw_points_curve(sub_plt, points, lw=10, alpha=0.1)
+    # Плоскость проекции
+    if SHOW_PROJECTION:
+        draw_plane(sub_plt, R, G, B, Zero)
+        draw_points(sub_plt, Hs, 'black', 's')
     pts_all = [Zero, R, G, B] + points + Hs
     draw_scale_plot(sub_plt, pts_all)
 
@@ -197,8 +205,14 @@ def draw_projection(sub_plt, Zero, P, H, c = "tab:blue", idx = 0):
         color=c, linewidth=1.0, alpha=0.6, linestyle="--"
     )
     p1, label1 = draw_point(sub_plt, P, f"{cie.get_L(idx)}", c, marker="o", s=10)
-    p2, label2 = draw_point(sub_plt, H, f"H", c, marker="o", s=15)
-    dynamic_obj['3d'].extend([p1, label1, p2, label2, plot])
+    dynamic_obj['3d'].extend([
+         plot, p1, label1
+    ])
+    if SHOW_PROJECTION:
+        p2, label2 = draw_point(sub_plt, H, f"H", c, marker="o", s=15)
+        dynamic_obj['3d'].extend([
+            p2, label2
+        ])
 
 
 def draw_BR_BG_decomposition(sub_plt, B, xBR, yBG, BH, M, idx: int = 1):
@@ -211,7 +225,8 @@ def draw_BR_BG_decomposition(sub_plt, B, xBR, yBG, BH, M, idx: int = 1):
 def draw_3d_XYZ_plot_dynamic(points: List[Vec], Hs, B, xBR, yBG, BH, M, i: int = 0, fig=None, sub_plt=None):
     Zero = (0.0, 0.0, 0.0)
     draw_projection(sub_plt, Zero, points[i], Hs[i], idx=i)
-    draw_BR_BG_decomposition(sub_plt, B, xBR, yBG, BH, M, idx=i)
+    if SHOW_DECOMPOSITION:
+        draw_BR_BG_decomposition(sub_plt, B, xBR, yBG, BH, M, idx=i)
 
 def draw_2d_xy_plot_static(ax_2d, h_2d_list, selected_idx, label_info, R,G,B):
     ax_2d.clear()
