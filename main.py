@@ -65,14 +65,6 @@ def solve_in_plane_basis(BR: Vec, BG: Vec, BH: Vec) -> Tuple[float, float]:
     return u, v
 
 
-def get_decompose(planeRGB, H: Vec):
-    
-
-   
-    
-    return uBR, vBG, BH 
-
-
 def draw_points(sub_plt, points, color , m = '.'):
     for i in range(len(points)):
         draw_point(sub_plt, points[i], f"", color, marker=m, s=5)
@@ -93,7 +85,7 @@ def draw_vector(sub_plt, O: Vec, V: Vec, name: str, color: str, lw=2.0, ls="-", 
         linewidth=lw,
         linestyle=ls,
         alpha=alpha,
-        arrow_length_ratio=0.08
+        arrow_length_ratio=0.1
     )
     E = add(O, mul(0.5, V))
     txt = sub_plt.text(E[0], E[1], E[2], f" {name}", color=color)
@@ -210,9 +202,9 @@ def draw_projection(sub_plt, Zero, P, H, c = "tab:blue", idx = 0):
 
 
 def draw_BR_BG_decomposition(sub_plt, B, xBR, yBG, BH, M, idx: int = 1):
-    q1, txt1 = draw_vector(sub_plt, B, xBR, f"", "red", lw=2.4, alpha=0.5)
-    q2, txt2 = draw_vector(sub_plt, M, yBG, f"", "green", lw=2.4, alpha=0.5)
-    q3, txt3 = draw_vector(sub_plt, B, BH, f"", "black", lw=1.8, ls="--", alpha=0.5)
+    q1, txt1 = draw_vector(sub_plt, B, xBR, f"", "red", lw=2, alpha=1)
+    q2, txt2 = draw_vector(sub_plt, M, yBG, f"", "green", lw=2, alpha=1)
+    q3, txt3 = draw_vector(sub_plt, B, BH, f"", "black", lw=2, ls="-", alpha=1)
     dynamic_obj['3d'].extend([q1, txt1, q2, txt2, q3, txt3])
 
 
@@ -279,7 +271,7 @@ def main():
     """
     Интерактивная визуализация с ползунком выбора точки
     """
-    initial_point = 46
+    initial_point = 39
     # Начальные расчеты
     R = (1.0, 0.0, 0.0)
     G = (0.0, 1.0, 0.0)
@@ -316,6 +308,7 @@ def main():
     
     sub_plt_cmf = fig.add_subplot(131)
     sub_plt_XYZ = fig.add_subplot(132, projection="3d")
+    sub_plt_XYZ.view_init(elev=30, azim=17)
     sub_plt_xy = fig.add_subplot(133)
     sub_plt_XYZ.set_title("ciexyz")
     plt.subplots_adjust(bottom=0.15, left=0.04, right=0.98, top=0.95, wspace=0.3)
