@@ -7,6 +7,14 @@ from typing import Tuple, List
 import ciexyz31 as cie
 from vis_interface import VisInterface, Control
 
+# ============================================
+# ВЫБОР БИБЛИОТЕКИ ВИЗУАЛИЗАЦИИ
+# ============================================
+# Доступные варианты: 'matplotlib' или 'plotly'
+# matplotlib - классическая библиотека с Qt5Agg backend, поддерживает интерактивные слайдеры
+# plotly - WebGL визуализация, интерактивные 3D графики в браузере
+USE_BACKEND = 'plotly'  # Измените на 'plotly' для использования Plotly
+# ============================================
 
 SHOW_PROJECTION = 1
 SHOW_DECOMPOSITION = 1
@@ -225,6 +233,23 @@ def draw_2d_xy_plot_dynamic(vis, B, BH, xBR, yBG, H_label='H'):
     
 
 def main():
+    # Проверка выбранной библиотеки визуализации
+    if USE_BACKEND == 'plotly':
+        print("Запуск визуализации с использованием Plotly (WebGL)...")
+        try:
+            import main_plotly
+            main_plotly.main()
+            return
+        except ImportError as e:
+            print(f"Ошибка импорта Plotly модуля: {e}")
+            print("Убедитесь, что установлены необходимые зависимости: pip install plotly")
+            print("Переключение на matplotlib backend...")
+    elif USE_BACKEND != 'matplotlib':
+        print(f"Неизвестный backend '{USE_BACKEND}', использую matplotlib по умолчанию")
+
+    # Запуск с matplotlib backend
+    print("Запуск визуализации с использованием Matplotlib (Qt5Agg)...")
+
     initial_point = 39
     R = (1.0, 0.0, 0.0)
     G = (0.0, 1.0, 0.0)
