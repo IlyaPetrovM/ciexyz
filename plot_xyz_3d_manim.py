@@ -104,7 +104,7 @@ class XYZ3DPlot(ThreeDScene):
         scale = 3.5
 
         # Настройка камеры
-        self.set_camera_orientation(phi=65 * DEGREES, theta=-50 * DEGREES, zoom=0.8)
+        self.set_camera_orientation(phi=65 * DEGREES, theta=50 * DEGREES, zoom=0.8)
 
         # === СОЗДАНИЕ ОБЪЕКТОВ ===
 
