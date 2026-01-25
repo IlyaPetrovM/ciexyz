@@ -1,7 +1,8 @@
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from matplotlib.collections import PolyCollection
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import dash
+from dash import dcc, html, Input, Output
+import numpy as np
 from typing import Tuple, List
 import ciexyz31 as cie
 
@@ -10,7 +11,6 @@ SHOW_PROJECTION = 1
 SHOW_DECOMPOSITION = 1
 
 
-dynamic_obj = {'3d':[], 'cmf':[], 'xy_plane':[]}
 Vec = Tuple[float, float, float]
 EPS = 1e-12
 
@@ -37,6 +37,70 @@ def cross(a: Vec, b: Vec) -> Vec:
 def norm2(a: Vec) -> float:
     return dot(a, a)
 
+
+def create_arrow_3d(O: Vec, V: Vec, color: str, lw: float = 2.0) -> dict:
+    """Создаёт стрелку в 3D: линия от O до O+V с конусом на конце"""
+    E = add(O, V)
+
+    # Направление вектора для конуса
+    V_len = (V[0]**2 + V[1]**2 + V[2]**2) ** 0.5
+    if V_len < EPS:
+        return {}
+
+    # Коэффициент для размера конуса
+    arrow_ratio = 0.15
+    cone_base = mul(arrow_ratio, V)
+
+    # Точка основания конуса
+    cone_base_point = sub(E, cone_base)
+
+    # Создаём конус используя Cone в plotly
+    arrow_data = {
+        'line': {
+            'x': [O[0], cone_base_point[0]],
+            'y': [O[1], cone_base_point[1]],
+            'z': [O[2], cone_base_point[2]],
+            'color': color,
+            'width': lw
+        },
+        'cone': {
+            'x': [E[0]],
+            'y': [E[1]],
+            'z': [E[2]],
+            'u': [V[0] * arrow_ratio],
+            'v': [V[1] * arrow_ratio],
+            'w': [V[2] * arrow_ratio],
+            'color': color,
+            'sizemode': 'scaled',
+            'sizeref': 2
+        }
+    }
+    return arrow_data
+
+
+def create_arrow_2d(O: tuple, V: tuple, color: str) -> dict:
+    """Создаёт стрелку в 2D: линия от O до O+V с конусом на конце"""
+    E = (O[0] + V[0], O[1] + V[1])
+
+    arrow_ratio = 0.15
+    cone_base = (O[0] + V[0] * (1 - arrow_ratio), O[1] + V[1] * (1 - arrow_ratio))
+
+    arrow_data = {
+        'line': {
+            'x': [O[0], cone_base[0]],
+            'y': [O[1], cone_base[1]],
+            'color': color,
+            'width': 2
+        },
+        'marker': {
+            'x': [E[0]],
+            'y': [E[1]],
+            'symbol': 'triangle-up',
+            'size': 10,
+            'color': color
+        }
+    }
+    return arrow_data
 
 
 def intersect_ray_with_plane(P: Vec, planeRGB) -> Vec:
@@ -70,221 +134,237 @@ def solve_in_plane_basis(BR: Vec, BG: Vec, BH: Vec) -> Tuple[float, float]:
     return u, v
 
 
-def draw_points(sub_plt, points, color , m = '.'):
-    for i in range(len(points)):
-        draw_point(sub_plt, points[i], f"", color, marker=m, s=5)
 
 
-
-def draw_point(sub_plt, pt: Vec, name: str, color: str, marker="o", s=30):
-    p = sub_plt.scatter([pt[0]], [pt[1]], [pt[2]], s=s, color=color, marker=marker)
-    label = sub_plt.text(pt[0], pt[1], pt[2], f" {name}", color=color)
-    return p, label
-
-
-def draw_vector(sub_plt, O: Vec, V: Vec, name: str, color: str, lw=2.0, ls="-", alpha=0.9):
-    q = sub_plt.quiver(
-        O[0], O[1], O[2],
-        V[0], V[1], V[2],
-        color=color,
-        linewidth=lw,
-        linestyle=ls,
-        alpha=alpha,
-        arrow_length_ratio=0.1
-    )
-    E = add(O, mul(0.5, V))
-    txt = sub_plt.text(E[0], E[1], E[2], f" {name}", color=color)
-    return q, txt
-
-
-def draw_plane(sub_plt, R: Vec, G: Vec, B: Vec, Zero: Vec):
-    draw_point(sub_plt, R, "R", "red")
-    draw_point(sub_plt, G, "G", "green")
-    draw_point(sub_plt, B, "B", "blue")
-    draw_point(sub_plt, Zero, "0", "black", s=50)
-
-    poly = Poly3DCollection([[R, G, B]], alpha=0.25, facecolor="gray", edgecolor="none")
-    sub_plt.add_collection3d(poly)
-    sub_plt.plot(
-        [R[0], G[0], B[0], R[0]],
-        [R[1], G[1], B[1], R[1]],
-        [R[2], G[2], B[2], R[2]],
-        color="gray", linewidth=0
-    )
-
-
-def draw_points_curve(sub_plt, points, color="purple", lw=1.5, alpha=0.7, label="Спектр"):
-    """Соединяет точки из массива points линией"""
-    if len(points) < 2:
-        return
-    
+def create_cmf_plot(points, project_point_i, wavelengths):
+    """Создаёт 2D график зависимости координат X,Y,Z от длины волны"""
     xs = [p[0] for p in points]
     ys = [p[1] for p in points]
     zs = [p[2] for p in points]
-    
-    sub_plt.plot(xs, ys, zs, color=color, linewidth=lw, alpha=alpha, label=label)
+
+    fig = go.Figure()
+
+    # Кривые
+    fig.add_trace(go.Scatter(x=wavelengths, y=xs, mode='lines', name='R',
+                            line=dict(color='red', width=1.5), opacity=0.8))
+    fig.add_trace(go.Scatter(x=wavelengths, y=ys, mode='lines', name='G',
+                            line=dict(color='green', width=1.5), opacity=0.8))
+    fig.add_trace(go.Scatter(x=wavelengths, y=zs, mode='lines', name='B',
+                            line=dict(color='blue', width=1.5), opacity=0.8))
+
+    # Выбранные точки
+    fig.add_trace(go.Scatter(x=[wavelengths[project_point_i]], y=[xs[project_point_i]],
+                            mode='markers', marker=dict(size=10, color='red'),
+                            showlegend=False))
+    fig.add_trace(go.Scatter(x=[wavelengths[project_point_i]], y=[ys[project_point_i]],
+                            mode='markers', marker=dict(size=10, color='green'),
+                            showlegend=False))
+    fig.add_trace(go.Scatter(x=[wavelengths[project_point_i]], y=[zs[project_point_i]],
+                            mode='markers', marker=dict(size=10, color='blue'),
+                            showlegend=False))
+
+    # Вертикальная линия
+    fig.add_vline(x=wavelengths[project_point_i], line_dash="dash", line_color="gray", opacity=0.5)
+
+    fig.update_layout(
+        title='CIE 1931 2-deg observer, CMF (Color matching Functions)',
+        xaxis_title='Длина волны (нм)',
+        yaxis_title='Отклик',
+        hovermode='closest',
+        template='plotly_white'
+    )
+
+    return fig
 
 
-def draw_3d_coords(sub_plt):
-    x0, x1 = sub_plt.get_xlim()
-    y0, y1 = sub_plt.get_ylim()
-    z0, z1 = sub_plt.get_zlim()
+def create_3d_xyz_plot(points: List[Vec], Hs, R: Vec, G: Vec, B: Vec,
+                       project_point_i: int = 0, point_idx: int = None,
+                       xBR: Vec = None, yBG: Vec = None, BH: Vec = None, M: Vec = None):
+    """Создаёт 3D график XYZ с динамическими элементами"""
+    if point_idx is None:
+        point_idx = project_point_i
 
-    sub_plt.plot([x0, x1], [0, 0], [0, 0], color="red", linewidth=4, alpha=0.4)
-    sub_plt.plot([0, 0], [y0, y1], [0, 0], color="green", linewidth=4, alpha=0.4)
-    sub_plt.plot([0, 0], [0, 0], [z0, z1], color="blue", linewidth=4, alpha=0.4)
+    Zero = (0.0, 0.0, 0.0)
+    fig = go.Figure()
 
-    sub_plt.set_xlabel("R")
-    sub_plt.set_ylabel("G")
-    sub_plt.set_zlabel("B")
+    # Оси координат
+    x0, x1 = -0.5, 1.5
+    y0, y1 = -0.5, 1.5
+    z0, z1 = -0.5, 1.5
 
+    fig.add_trace(go.Scatter3d(x=[x0, x1], y=[0, 0], z=[0, 0], mode='lines',
+                              line=dict(color='red', width=6), opacity=0.4, showlegend=False))
+    fig.add_trace(go.Scatter3d(x=[0, 0], y=[y0, y1], z=[0, 0], mode='lines',
+                              line=dict(color='green', width=6), opacity=0.4, showlegend=False))
+    fig.add_trace(go.Scatter3d(x=[0, 0], y=[0, 0], z=[z0, z1], mode='lines',
+                              line=dict(color='blue', width=6), opacity=0.4, showlegend=False))
 
-def draw_scale_plot(sub_plt, pts_all):
-    xs = [p[0] for p in pts_all]
-    ys = [p[1] for p in pts_all]
-    zs = [p[2] for p in pts_all]
-    xmin, xmax = min(xs), max(xs)
-    ymin, ymax = min(ys), max(ys)
-    zmin, zmax = min(zs), max(zs)
+    # Спектральная кривая
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    zs = [p[2] for p in points]
+    fig.add_trace(go.Scatter3d(x=xs, y=ys, z=zs, mode='markers', marker=dict(size=3, color='black'),
+                              showlegend=False, opacity=0.5))
+    fig.add_trace(go.Scatter3d(x=xs, y=ys, z=zs, mode='lines', line=dict(color='purple', width=2),
+                              showlegend=False, opacity=0.1))
+
+    # Плоскость RGB
+    if SHOW_PROJECTION:
+        fig.add_trace(go.Mesh3d(x=[R[0], G[0], B[0]], y=[R[1], G[1], B[1]], z=[R[2], G[2], B[2]],
+                               i=[0], j=[1], k=[2], opacity=0.25, color='gray', showlegend=False))
+
+        # Точки Hs
+        hs_x = [h[0] for h in Hs]
+        hs_y = [h[1] for h in Hs]
+        hs_z = [h[2] for h in Hs]
+        fig.add_trace(go.Scatter3d(x=hs_x, y=hs_y, z=hs_z, mode='markers',
+                                  marker=dict(size=4, color='black', symbol='square'),
+                                  showlegend=False))
+
+    # Динамические элементы (проекция)
+    P = points[point_idx]
+    H = Hs[point_idx]
+    fig.add_trace(go.Scatter3d(x=[Zero[0], max(H[0], P[0])], y=[Zero[1], max(H[1], P[1])],
+                              z=[Zero[2], max(H[2], P[2])], mode='lines',
+                              line=dict(color='lightblue', width=2, dash='dash'), opacity=0.6, showlegend=False))
+
+    fig.add_trace(go.Scatter3d(x=[P[0]], y=[P[1]], z=[P[2]], mode='markers+text',
+                              marker=dict(size=5, color='lightblue'),
+                              text=[f"{cie.get_L(point_idx)}"], textposition='top center', showlegend=False))
+
+    if SHOW_PROJECTION:
+        fig.add_trace(go.Scatter3d(x=[H[0]], y=[H[1]], z=[H[2]], mode='markers',
+                                  marker=dict(size=8, color='lightblue'),
+                                  showlegend=False))
+
+    # Декомпозиция векторов
+    if SHOW_DECOMPOSITION and xBR is not None and yBG is not None and BH is not None and M is not None:
+        # Вектор xBR из B
+        fig.add_trace(go.Scatter3d(x=[B[0], add(B, xBR)[0]], y=[B[1], add(B, xBR)[1]],
+                                  z=[B[2], add(B, xBR)[2]], mode='lines',
+                                  line=dict(color='red', width=3), showlegend=False))
+
+        # Вектор yBG из M
+        M = add(B, xBR)
+        fig.add_trace(go.Scatter3d(x=[M[0], add(M, yBG)[0]], y=[M[1], add(M, yBG)[1]],
+                                  z=[M[2], add(M, yBG)[2]], mode='lines',
+                                  line=dict(color='green', width=3), showlegend=False))
+
+        # Вектор BH из B
+        fig.add_trace(go.Scatter3d(x=[B[0], add(B, BH)[0]], y=[B[1], add(B, BH)[1]],
+                                  z=[B[2], add(B, BH)[2]], mode='lines',
+                                  line=dict(color='black', width=3), showlegend=False))
+
+    # Вычисление границ для масштаба
+    pts_all = [Zero, R, G, B] + points + Hs
+    xs_all = [p[0] for p in pts_all]
+    ys_all = [p[1] for p in pts_all]
+    zs_all = [p[2] for p in pts_all]
+    xmin, xmax = min(xs_all), max(xs_all)
+    ymin, ymax = min(ys_all), max(ys_all)
+    zmin, zmax = min(zs_all), max(zs_all)
 
     cx, cy, cz = (xmin+xmax)/2, (ymin+ymax)/2, (zmin+zmax)/2
     span = max(xmax-xmin, ymax-ymin, zmax-zmin) * 0.6 + 1e-9
-    sub_plt.set_xlim(cx - span, cx + span)
-    sub_plt.set_ylim(cy - span, cy + span)
-    sub_plt.set_zlim(cz - span, cz + span)
 
-
-def draw_2d_CMF_plot(ax_2d, points, project_point_i, wavelengths):
-    """Рисует 2D график зависимости координат X,Y,Z от длины волны"""
-
-    ax_2d.clear()
-    
-    xs = [p[0] for p in points]
-    ys = [p[1] for p in points]
-    zs = [p[2] for p in points]
-    
-    ax_2d.plot(wavelengths, xs, 'r-', label='R', linewidth=1.5, alpha=0.8)
-    ax_2d.plot(wavelengths, ys, 'g-', label='G', linewidth=1.5, alpha=0.8)
-    ax_2d.plot(wavelengths, zs, 'b-', label='B', linewidth=1.5, alpha=0.8)
-    
-    # Подсветка выбранной точки
-    ax_2d.scatter([wavelengths[project_point_i]], [xs[project_point_i]], color='red', s=80, zorder=5, marker='o')
-    ax_2d.scatter([wavelengths[project_point_i]], [ys[project_point_i]], color='green', s=80, zorder=5, marker='o')
-    ax_2d.scatter([wavelengths[project_point_i]], [zs[project_point_i]], color='blue', s=80, zorder=5, marker='o')
-    
-    ax_2d.axvline(wavelengths[project_point_i], color='gray', linestyle='--', linewidth=1, alpha=0.5)
-    
-    ax_2d.set_xlabel('Длина волны (нм)')
-    ax_2d.set_ylabel('Отклик')
-    ax_2d.set_title('CIE 1931 2-deg observer, CMF (Color matching Functions)')
-    ax_2d.legend(loc='best')
-    ax_2d.grid(True, alpha=0.3)
-
-
-def draw_3d_XYZ_plot_static(points: List[Vec], Hs, R: Vec, G: Vec, B: Vec, project_point_i: int = 0, fig=None, sub_plt=None):
-    Zero = (0.0, 0.0, 0.0)
-    draw_3d_coords(sub_plt)
-    draw_points(sub_plt, points, 'black', '.')
-    draw_points_curve(sub_plt, points, lw=10, alpha=0.1)
-    # Плоскость проекции
-    if SHOW_PROJECTION:
-        draw_plane(sub_plt, R, G, B, Zero)
-        draw_points(sub_plt, Hs, 'black', 's')
-    pts_all = [Zero, R, G, B] + points + Hs
-    draw_scale_plot(sub_plt, pts_all)
-
-
-def draw_projection(sub_plt, Zero, P, H, c = "tab:blue", idx = 0):
-    '''
-        Рисовать проекцию из Zero --- P --- H
-    '''
-    plot, = sub_plt.plot(
-        [Zero[0], max(H[0], P[0])],
-        [Zero[1], max(H[1], P[1])],
-        [Zero[2], max(H[2], P[2])],
-        color=c, linewidth=1.0, alpha=0.6, linestyle="--"
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(range=[cx - span, cx + span]),
+            yaxis=dict(range=[cy - span, cy + span]),
+            zaxis=dict(range=[cz - span, cz + span]),
+            xaxis_title='R',
+            yaxis_title='G',
+            zaxis_title='B'
+        ),
+        title='ciexyz',
+        template='plotly_white'
     )
-    p1, label1 = draw_point(sub_plt, P, f"{cie.get_L(idx)}", c, marker="o", s=10)
-    dynamic_obj['3d'].extend([
-         plot, p1, label1
-    ])
-    if SHOW_PROJECTION:
-        p2, label2 = draw_point(sub_plt, H, f"H", c, marker="o", s=15)
-        dynamic_obj['3d'].extend([
-            p2, label2
-        ])
+    fig.update_scenes(camera=dict(eye=dict(x=0.8, y=0.8, z=0.6)))
 
+    return fig
 
-def draw_BR_BG_decomposition(sub_plt, B, xBR, yBG, BH, M, idx: int = 1):
-    q1, txt1 = draw_vector(sub_plt, B, xBR, f"", "red", lw=2, alpha=1)
-    q2, txt2 = draw_vector(sub_plt, M, yBG, f"", "green", lw=2, alpha=1)
-    q3, txt3 = draw_vector(sub_plt, B, BH, f"", "black", lw=2, ls="-", alpha=1)
-    dynamic_obj['3d'].extend([q1, txt1, q2, txt2, q3, txt3])
+def create_2d_xy_plot(h_2d_list, selected_idx, wavelength, B, G, R,
+                      BH_coords=None, xBR=None, yBG=None, point_idx=None):
+    """Создаёт 2D XY diagram"""
+    if point_idx is None:
+        point_idx = selected_idx
 
+    fig = go.Figure()
 
-def draw_3d_XYZ_plot_dynamic(points: List[Vec], Hs, B, xBR, yBG, BH, M, i: int = 0, fig=None, sub_plt=None):
-    Zero = (0.0, 0.0, 0.0)
-    draw_projection(sub_plt, Zero, points[i], Hs[i], idx=i)
-    if SHOW_DECOMPOSITION:
-        draw_BR_BG_decomposition(sub_plt, B, xBR, yBG, BH, M, idx=i)
+    # Плоскость RGB треугольник
+    if len(h_2d_list) > 0:
+        fig.add_trace(go.Scatter(x=[R[0], G[0], B[0], R[0]], y=[R[1], G[1], B[1], R[1]],
+                                mode='lines', line=dict(color='gray', width=1),
+                                fill='toself', fillcolor='rgba(128, 128, 128, 0.2)',
+                                showlegend=False))
 
-def draw_2d_xy_plot_static(ax_2d, h_2d_list, selected_idx, label_info, R,G,B):
-    ax_2d.clear()
+    # Точки RGB
+    fig.add_trace(go.Scatter(x=[B[0]], y=[B[1]], mode='markers+text',
+                            marker=dict(size=8, color='blue'),
+                            text=['B (0,0)'], textposition='bottom center',
+                            name='B (0,0)', showlegend=False))
+    fig.add_trace(go.Scatter(x=[R[0]], y=[R[1]], mode='markers+text',
+                            marker=dict(size=12, color='red'),
+                            text=['R (1,0)'], textposition='bottom center',
+                            name='R (1,0)', showlegend=False))
+    fig.add_trace(go.Scatter(x=[G[0]], y=[G[1]], mode='markers+text',
+                            marker=dict(size=12, color='green'),
+                            text=['G (0,1)'], textposition='bottom center',
+                            name='G (0,1)', showlegend=False))
 
-    # Оформление осей
-    ax_2d.set_xlabel('x (компонента вдоль BR)')
-    ax_2d.set_ylabel('y (компонента вдоль BG)')
-    ax_2d.set_title('Проекция на плоскость RGB - xy chromaticity diagram')
-    ax_2d.legend(loc='best', fontsize=9)
-    ax_2d.grid(True, alpha=0.3, linestyle='--')
-    ax_2d.set_aspect('equal')
-    ax_2d.axhline(0, alpha=0.4)
-    ax_2d.axvline(0, alpha=0.4)
-
-    # 1. Рисуем плоскость RGB
-    poly = PolyCollection([[R, G, B]], facecolors=["gray"], edgecolors='none', alpha=0.4)
-    ax_2d.add_collection(poly)
-
-    ax_2d.scatter([B[0]], [B[1]], color='blue', s=10, label='B (0,0)', zorder=6)
-    ax_2d.scatter([R[0]], [R[1]], color='red', s=50, label='R (1,0)', zorder=5)
-    ax_2d.scatter([G[0]], [G[1]], color='green', s=50, label='G (0,1)', zorder=5)
-    ax_2d.text(R[0], R[1], '  R',  color='red')
-    ax_2d.text(G[0], G[1], '  G',  color='green')
-    ax_2d.text(B[0], B[1], '  B',  color='blue')
-
-    # 2. Рисуем спектральную кривую
+    # Спектральная кривая
     if len(h_2d_list) > 1:
         xs, ys = zip(*h_2d_list)
-        ax_2d.plot(xs, ys, 'black', linewidth=2, alpha=0.6, label='Спектральная кривая', zorder=2)
-    
-    # 3. Рисуем все точки H
-    h_x, h_y = zip(*h_2d_list)
-    ax_2d.scatter(h_x, h_y, color='black', s=10, zorder=3, marker='s', alpha=0.6)
-    
+        fig.add_trace(go.Scatter(x=xs, y=ys, mode='lines',
+                                line=dict(color='black', width=2),
+                                name='Спектральная кривая', opacity=0.6))
+        fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers',
+                                marker=dict(size=5, color='black', symbol='square'),
+                                showlegend=False, opacity=0.6))
 
-def draw_2d_xy_plot_dynamic(ax_2d, B, BH, xBR, yBG, H_label = 'H'):
-    # Изменяемая часть    
-    p = ax_2d.scatter([BH[0]], [BH[1]], color='darkblue', s=10, zorder=5, marker='o')
+    # Динамические элементы (выбранная точка и векторы)
+    if BH_coords is not None and xBR is not None and yBG is not None:
+        # BH_coords это (u, v) - координаты на плоскости
+        fig.add_trace(go.Scatter(x=[BH_coords[0]], y=[BH_coords[1]], mode='markers+text',
+                                marker=dict(size=8, color='darkblue'),
+                                text=[f'H ({wavelength} nm)'], textposition='top center',
+                                showlegend=False))
 
-    txt = ax_2d.text(BH[0], BH[1], H_label, fontsize=10, color='darkblue', fontweight='bold', va='bottom')
+        # Вектор BH
+        fig.add_trace(go.Scatter(x=[B[0], B[0] + BH_coords[0]], y=[B[1], B[1] + BH_coords[1]],
+                                mode='lines', line=dict(color='black', width=2),
+                                showlegend=False))
 
-    # Векторы 
-    q1 = ax_2d.quiver(B[0], B[1], BH[0], BH[1], 
-         angles='xy', scale_units='xy', scale=1, 
-         width=0.005, color='black', alpha=1)
-    q2 = ax_2d.quiver(B[0], B[1], xBR[0], xBR[1],
-         angles='xy', scale_units='xy', scale=1, 
-         width=0.005, color='red', alpha=1)
-    q3 = ax_2d.quiver(xBR[0], xBR[1], yBG[0], yBG[1],
-         angles='xy', scale_units='xy', scale=1, 
-         width=0.005, color='green', alpha=1)
+        # Вектор xBR
+        fig.add_trace(go.Scatter(x=[B[0], B[0] + xBR[0]], y=[B[1], B[1] + xBR[1]],
+                                mode='lines', line=dict(color='red', width=2),
+                                showlegend=False))
 
-    dynamic_obj['xy_plane'].extend([p, txt, q1, q2, q3])
+        # Вектор yBG
+        xBR_end = (B[0] + xBR[0], B[1] + xBR[1])
+        fig.add_trace(go.Scatter(x=[xBR_end[0], xBR_end[0] + yBG[0]],
+                                y=[xBR_end[1], xBR_end[1] + yBG[1]],
+                                mode='lines', line=dict(color='green', width=2),
+                                showlegend=False))
+
+    fig.update_layout(
+        title='Проекция на плоскость RGB - xy chromaticity diagram',
+        xaxis_title='x (компонента вдоль BR)',
+        yaxis_title='y (компонента вдоль BG)',
+        hovermode='closest',
+        template='plotly_white',
+        xaxis=dict(scaleanchor='y', scaleratio=1),
+        yaxis=dict(scaleanchor='x', scaleratio=1)
+    )
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.4)
+    fig.add_vline(x=0, line_dash="dash", line_color="gray", opacity=0.4)
+
+    return fig
     
 
 def main():
     """
-    Интерактивная визуализация с ползунком выбора точки
+    Интерактивное веб-приложение с Dash и plotly для визуализации
     """
     initial_point = 39
     # Начальные расчеты
@@ -300,7 +380,7 @@ def main():
 
     points = cie.get_every_n_points(n)
     wavelengths = [cie.get_L(i) for i in range(0, len(cie.cieL), n)]
-    Hs = [intersect_ray_with_plane(P, planeRGB) for P in points] 
+    Hs = [intersect_ray_with_plane(P, planeRGB) for P in points]
     BR = sub(R, B)
     BG = sub(G, B)
 
@@ -309,71 +389,101 @@ def main():
         u, v = solve_in_plane_basis(BR, BG, sub(H, B))
         h_2d_points.append((u, v))
 
-    BR = sub(planeRGB[0], planeRGB[2])
-    BG = sub(planeRGB[1], planeRGB[2])
-    BH = sub(Hs[initial_point], planeRGB[2])
-    x, y = solve_in_plane_basis(BR, BG, BH)
-    xBR = mul(u, BR)
-    yBG = mul(v, BG)
-    M = add(B, xBR)
+    # Инициализация Dash приложения
+    app = dash.Dash(__name__)
 
+    app.layout = html.Div([
+        html.H1("CIE XYZ Color Visualization", style={'textAlign': 'center', 'marginBottom': 30}),
 
-    # Инициализация графиков
-    fig = plt.figure(figsize=(20, 7))
-    
-    sub_plt_cmf = fig.add_subplot(131)
-    sub_plt_XYZ = fig.add_subplot(132, projection="3d")
-    sub_plt_XYZ.view_init(elev=30, azim=17)
-    sub_plt_xy = fig.add_subplot(133)
-    sub_plt_XYZ.set_title("ciexyz")
-    plt.subplots_adjust(bottom=0.15, left=0.04, right=0.98, top=0.95, wspace=0.3)
-    
-    draw_2d_CMF_plot(sub_plt_cmf, points, initial_point, wavelengths)
-    draw_3d_XYZ_plot_static(points, Hs, R, G, B, initial_point, fig, sub_plt_XYZ)
-    draw_2d_xy_plot_static(sub_plt_xy, h_2d_points, initial_point,  f"{cie.get_L(initial_point)} нм", R_2d, G_2d, B_2d)
-    
-    fig.canvas.draw_idle()
+        html.Div([
+            html.Label("Выберите точку спектра:", style={'fontSize': 18, 'fontWeight': 'bold'}),
+            dcc.Slider(
+                id='spectrum-slider',
+                min=0,
+                max=len(points) - 1,
+                value=initial_point,
+                step=1,
+                marks={0: '0', len(points)-1: str(len(points)-1)},
+                tooltip={"placement": "bottom", "always_visible": True}
+            ),
+        ], style={'margin': '20px 20px 40px 20px'}),
 
-    # Создаём слайдер для подсветки точки на всех трёх графиках 
-    ax_slider = plt.axes([0.2, 0.05, 0.6, 0.03])
-    slider = Slider(
-        ax_slider, 
-        'Точка спектра', 
-        0, 
-        len(points) - 1, 
-        valinit=initial_point, 
-        valstep=1,
-        color='lightblue'
+        html.Div([
+            dcc.Graph(id='cmf-plot', style={'width': '33%', 'display': 'inline-block'}),
+            dcc.Graph(id='xyz-plot', style={'width': '33%', 'display': 'inline-block'}),
+            dcc.Graph(id='xy-plot', style={'width': '33%', 'display': 'inline-block'}),
+        ], style={'display': 'flex'}),
+
+        dcc.Store(id='data-store', data={
+            'points': [list(p) for p in points],
+            'Hs': [list(h) for h in Hs],
+            'wavelengths': wavelengths,
+            'h_2d_points': h_2d_points,
+            'BR': list(BR),
+            'BG': list(BG),
+            'B': list(B),
+            'R': list(R),
+            'G': list(G),
+            'R_2d': R_2d,
+            'G_2d': G_2d,
+            'B_2d': B_2d,
+        })
+    ])
+
+    @app.callback(
+        [Output('cmf-plot', 'figure'),
+         Output('xyz-plot', 'figure'),
+         Output('xy-plot', 'figure')],
+        Input('spectrum-slider', 'value'),
+        Input('data-store', 'data')
     )
-    def update_scene(val):
-        # Отрисовка выбранной точки на графиках
-        point_idx = int(slider.val)
+    def update_plots(point_idx, data):
+        points_data = [tuple(p) for p in data['points']]
+        Hs_data = [tuple(h) for h in data['Hs']]
+        wavelengths_data = data['wavelengths']
+        h_2d_points_data = data['h_2d_points']
+        BR_data = tuple(data['BR'])
+        BG_data = tuple(data['BG'])
+        B_data = tuple(data['B'])
+        R_data = tuple(data['R'])
+        G_data = tuple(data['G'])
+        R_2d_data = tuple(data['R_2d'])
+        G_2d_data = tuple(data['G_2d'])
+        B_2d_data = tuple(data['B_2d'])
 
-        # Расчеты
-        BH = sub(Hs[point_idx], B)
-        u, v = solve_in_plane_basis(BR, BG, BH)
-        xBR = mul(u, BR)
-        yBG = mul(v, BG)
-        M = add(B, xBR)
+        # CMF plot
+        fig_cmf = create_cmf_plot(points_data, point_idx, wavelengths_data)
 
-        # Перерисовка 1
-        sub_plt_cmf.cla()
-        draw_2d_CMF_plot(sub_plt_cmf, points, point_idx, wavelengths)
-        # Перерисовка 2
-        for obj in dynamic_obj['3d']:
-            obj.remove()
-        dynamic_obj['3d'].clear()
-        draw_3d_XYZ_plot_dynamic(points, Hs, B, xBR, yBG, BH, M, point_idx, fig, sub_plt_XYZ)
-        # Перерисовка 3
-        for obj in dynamic_obj['xy_plane']:
-            obj.remove()
-        dynamic_obj['xy_plane'].clear()
-        draw_2d_xy_plot_dynamic(sub_plt_xy, B_2d, BH, xBR, yBG, H_label = f"H ({cie.get_L(point_idx)} nm)\n x={x:.2f}, y={y:.2f}")
-        fig.canvas.draw_idle()
+        # Расчеты для XYZ и XY plots
+        BH = sub(Hs_data[point_idx], B_data)
+        u, v = solve_in_plane_basis(BR_data, BG_data, BH)
+        xBR = mul(u, BR_data)
+        yBG = mul(v, BG_data)
+        M = add(B_data, xBR)
 
-    slider.on_changed(update_scene)
-    update_scene(initial_point)
-    plt.show()
+        # XYZ 3D plot
+        fig_xyz = create_3d_xyz_plot(
+            points_data, Hs_data, R_data, G_data, B_data,
+            project_point_i=point_idx, point_idx=point_idx,
+            xBR=xBR, yBG=yBG, BH=BH, M=M
+        )
+
+        # XY 2D plot
+        # Вычисляем 2D координаты для векторов
+        BR_2d = (R_2d_data[0] - B_2d_data[0], R_2d_data[1] - B_2d_data[1])
+        BG_2d = (G_2d_data[0] - B_2d_data[0], G_2d_data[1] - B_2d_data[1])
+        xBR_2d = (u * BR_2d[0], u * BR_2d[1])
+        yBG_2d = (v * BG_2d[0], v * BG_2d[1])
+
+        fig_xy = create_2d_xy_plot(
+            h_2d_points_data, point_idx, wavelengths_data[point_idx],
+            B_2d_data, G_2d_data, R_2d_data,
+            BH_coords=(u, v), xBR=xBR_2d, yBG=yBG_2d, point_idx=point_idx
+        )
+
+        return fig_cmf, fig_xyz, fig_xy
+
+    app.run(debug=True)
 
 
 if __name__ == "__main__":
