@@ -3,7 +3,7 @@ from plotly.subplots import make_subplots
 import dash
 from dash import dcc, html, Input, Output
 import numpy as np
-from typing import Tuple, List
+from typing import List
 import ciexyz31 as cie
 
 
@@ -11,48 +11,24 @@ SHOW_PROJECTION = 1
 SHOW_DECOMPOSITION = 1
 
 
-Vec = Tuple[float, float, float]
 EPS = 1e-12
 
-def add(a: Vec, b: Vec) -> Vec:
-    return (a[0]+b[0], a[1]+b[1], a[2]+b[2])
 
-def sub(a: Vec, b: Vec) -> Vec:
-    return (a[0]-b[0], a[1]-b[1], a[2]-b[2])
-
-def mul(k: float, a: Vec) -> Vec:
-    return (k*a[0], k*a[1], k*a[2])
-
-def dot(a: Vec, b: Vec) -> float:
-    return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
-
-def cross(a: Vec, b: Vec) -> Vec:
-    return (
-        a[1]*b[2] - a[2]*b[1],
-        a[2]*b[0] - a[0]*b[2],
-        a[0]*b[1] - a[1]*b[0],
-    )
-
-
-def norm2(a: Vec) -> float:
-    return dot(a, a)
-
-
-def create_arrow_3d(O: Vec, V: Vec, color: str, lw: float = 2.0) -> dict:
+def create_arrow_3d(O, V, color: str, lw: float = 2.0) -> dict:
     """Создаёт стрелку в 3D: линия от O до O+V с конусом на конце"""
-    E = add(O, V)
+    E = O + V
 
     # Направление вектора для конуса
-    V_len = (V[0]**2 + V[1]**2 + V[2]**2) ** 0.5
+    V_len = np.linalg.norm(V)
     if V_len < EPS:
         return {}
 
     # Коэффициент для размера конуса
     arrow_ratio = 0.15
-    cone_base = mul(arrow_ratio, V)
+    cone_base = arrow_ratio * V
 
     # Точка основания конуса
-    cone_base_point = sub(E, cone_base)
+    cone_base_point = E - cone_base
 
     # Создаём конус используя Cone в plotly
     arrow_data = {
@@ -103,27 +79,27 @@ def create_arrow_2d(O: tuple, V: tuple, color: str) -> dict:
     return arrow_data
 
 
-def intersect_ray_with_plane(P: Vec, planeRGB) -> Vec:
-    BR = sub(planeRGB[0], planeRGB[2])
-    BG = sub(planeRGB[1], planeRGB[2])
-    n = cross(BR, BG)
-    if norm2(n) < EPS:
+def intersect_ray_with_plane(P, planeRGB):
+    BR = planeRGB[0] - planeRGB[2]
+    BG = planeRGB[1] - planeRGB[2]
+    n = np.cross(BR, BG)
+    if np.dot(n, n) < EPS:
         raise ValueError("Точки R,G,B коллинеарны: плоскость не определена.")
 
-    n_dot_P = dot(n, P)
+    n_dot_P = np.dot(n, P)
     if abs(n_dot_P) < EPS:
         raise ValueError("Луч OP параллелен плоскости: пересечения нет или их бесконечно много.")
 
-    t = dot(n, planeRGB[2]) / n_dot_P
-    return mul(t, P)
+    t = np.dot(n, planeRGB[2]) / n_dot_P
+    return t * P
 
 
-def solve_in_plane_basis(BR: Vec, BG: Vec, BH: Vec) -> Tuple[float, float]:
-    aa = dot(BR, BR)
-    bb = dot(BG, BG)
-    ab = dot(BR, BG)
-    ha = dot(BH, BR)
-    hb = dot(BH, BG)
+def solve_in_plane_basis(BR, BG, BH):
+    aa = np.dot(BR, BR)
+    bb = np.dot(BG, BG)
+    ab = np.dot(BR, BG)
+    ha = np.dot(BH, BR)
+    hb = np.dot(BH, BG)
 
     den = aa * bb - ab * ab
     if abs(den) < EPS:
@@ -177,9 +153,9 @@ def create_cmf_plot(points, project_point_i, wavelengths):
     return fig
 
 
-def create_3d_xyz_plot(points: List[Vec], Hs, R: Vec, G: Vec, B: Vec,
+def create_3d_xyz_plot(points, Hs, R, G, B,
                        project_point_i: int = 0, point_idx: int = None,
-                       xBR: Vec = None, yBG: Vec = None, BH: Vec = None, M: Vec = None):
+                       xBR=None, yBG=None, BH=None, M=None):
     """Создаёт 3D график XYZ с динамическими элементами"""
     if point_idx is None:
         point_idx = project_point_i
@@ -240,19 +216,22 @@ def create_3d_xyz_plot(points: List[Vec], Hs, R: Vec, G: Vec, B: Vec,
     # Декомпозиция векторов
     if SHOW_DECOMPOSITION and xBR is not None and yBG is not None and BH is not None and M is not None:
         # Вектор xBR из B
-        fig.add_trace(go.Scatter3d(x=[B[0], add(B, xBR)[0]], y=[B[1], add(B, xBR)[1]],
-                                  z=[B[2], add(B, xBR)[2]], mode='lines',
+        B_xBR = B + xBR
+        fig.add_trace(go.Scatter3d(x=[B[0], B_xBR[0]], y=[B[1], B_xBR[1]],
+                                  z=[B[2], B_xBR[2]], mode='lines',
                                   line=dict(color='red', width=3), showlegend=False))
 
         # Вектор yBG из M
-        M = add(B, xBR)
-        fig.add_trace(go.Scatter3d(x=[M[0], add(M, yBG)[0]], y=[M[1], add(M, yBG)[1]],
-                                  z=[M[2], add(M, yBG)[2]], mode='lines',
+        M = B + xBR
+        M_yBG = M + yBG
+        fig.add_trace(go.Scatter3d(x=[M[0], M_yBG[0]], y=[M[1], M_yBG[1]],
+                                  z=[M[2], M_yBG[2]], mode='lines',
                                   line=dict(color='green', width=3), showlegend=False))
 
         # Вектор BH из B
-        fig.add_trace(go.Scatter3d(x=[B[0], add(B, BH)[0]], y=[B[1], add(B, BH)[1]],
-                                  z=[B[2], add(B, BH)[2]], mode='lines',
+        B_BH = B + BH
+        fig.add_trace(go.Scatter3d(x=[B[0], B_BH[0]], y=[B[1], B_BH[1]],
+                                  z=[B[2], B_BH[2]], mode='lines',
                                   line=dict(color='black', width=3), showlegend=False))
 
     # Вычисление границ для масштаба
@@ -341,9 +320,10 @@ def create_2d_xy_plot(h_2d_list, selected_idx, wavelength, B, G, R,
                                 showlegend=False))
 
         # Вектор yBG
-        xBR_end = (B[0] + xBR[0], B[1] + xBR[1])
-        fig.add_trace(go.Scatter(x=[xBR_end[0], xBR_end[0] + yBG[0]],
-                                y=[xBR_end[1], xBR_end[1] + yBG[1]],
+        xBR_end = B + xBR
+        yBG_end = xBR_end + yBG
+        fig.add_trace(go.Scatter(x=[xBR_end[0], yBG_end[0]],
+                                y=[xBR_end[1], yBG_end[1]],
                                 mode='lines', line=dict(color='green', width=2),
                                 showlegend=False))
 
@@ -368,25 +348,25 @@ def main():
     """
     initial_point = 39
     # Начальные расчеты
-    R = (1.0, 0.0, 0.0)
-    G = (0.0, 1.0, 0.0)
-    B = (0.0, 0.0, 1.0)
+    R = np.array([1.0, 0.0, 0.0])
+    G = np.array([0.0, 1.0, 0.0])
+    B = np.array([0.0, 0.0, 1.0])
 
-    R_2d = (1.0, 0.0)
-    G_2d = (0.0, 1.0)
-    B_2d = (0.0, 0.0)
+    R_2d = np.array([1.0, 0.0])
+    G_2d = np.array([0.0, 1.0])
+    B_2d = np.array([0.0, 0.0])
     planeRGB = (R, G, B)
     n = 1
 
-    points = cie.get_every_n_points(n)
+    points = [np.array(p) for p in cie.get_every_n_points(n)]
     wavelengths = [cie.get_L(i) for i in range(0, len(cie.cieL), n)]
     Hs = [intersect_ray_with_plane(P, planeRGB) for P in points]
-    BR = sub(R, B)
-    BG = sub(G, B)
+    BR = R - B
+    BG = G - B
 
     h_2d_points = []
     for H in Hs:
-        u, v = solve_in_plane_basis(BR, BG, sub(H, B))
+        u, v = solve_in_plane_basis(BR, BG, H - B)
         h_2d_points.append((u, v))
 
     # Инициализация Dash приложения
@@ -438,28 +418,28 @@ def main():
         Input('data-store', 'data')
     )
     def update_plots(point_idx, data):
-        points_data = [tuple(p) for p in data['points']]
-        Hs_data = [tuple(h) for h in data['Hs']]
+        points_data = [np.array(p) for p in data['points']]
+        Hs_data = [np.array(h) for h in data['Hs']]
         wavelengths_data = data['wavelengths']
         h_2d_points_data = data['h_2d_points']
-        BR_data = tuple(data['BR'])
-        BG_data = tuple(data['BG'])
-        B_data = tuple(data['B'])
-        R_data = tuple(data['R'])
-        G_data = tuple(data['G'])
-        R_2d_data = tuple(data['R_2d'])
-        G_2d_data = tuple(data['G_2d'])
-        B_2d_data = tuple(data['B_2d'])
+        BR_data = np.array(data['BR'])
+        BG_data = np.array(data['BG'])
+        B_data = np.array(data['B'])
+        R_data = np.array(data['R'])
+        G_data = np.array(data['G'])
+        R_2d_data = np.array(data['R_2d'])
+        G_2d_data = np.array(data['G_2d'])
+        B_2d_data = np.array(data['B_2d'])
 
         # CMF plot
         fig_cmf = create_cmf_plot(points_data, point_idx, wavelengths_data)
 
         # Расчеты для XYZ и XY plots
-        BH = sub(Hs_data[point_idx], B_data)
+        BH = Hs_data[point_idx] - B_data
         u, v = solve_in_plane_basis(BR_data, BG_data, BH)
-        xBR = mul(u, BR_data)
-        yBG = mul(v, BG_data)
-        M = add(B_data, xBR)
+        xBR = u * BR_data
+        yBG = v * BG_data
+        M = B_data + xBR
 
         # XYZ 3D plot
         fig_xyz = create_3d_xyz_plot(
@@ -470,10 +450,10 @@ def main():
 
         # XY 2D plot
         # Вычисляем 2D координаты для векторов
-        BR_2d = (R_2d_data[0] - B_2d_data[0], R_2d_data[1] - B_2d_data[1])
-        BG_2d = (G_2d_data[0] - B_2d_data[0], G_2d_data[1] - B_2d_data[1])
-        xBR_2d = (u * BR_2d[0], u * BR_2d[1])
-        yBG_2d = (v * BG_2d[0], v * BG_2d[1])
+        BR_2d = R_2d_data - B_2d_data
+        BG_2d = G_2d_data - B_2d_data
+        xBR_2d = u * BR_2d
+        yBG_2d = v * BG_2d
 
         fig_xy = create_2d_xy_plot(
             h_2d_points_data, point_idx, wavelengths_data[point_idx],
