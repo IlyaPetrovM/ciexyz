@@ -14,33 +14,10 @@ SHOW_DECOMPOSITION = 1
 Vec = Tuple[float, float, float]
 EPS = 1e-12
 
-def add(a: Vec, b: Vec) -> Vec:
-    return (a[0]+b[0], a[1]+b[1], a[2]+b[2])
-
-def sub(a: Vec, b: Vec) -> Vec:
-    return (a[0]-b[0], a[1]-b[1], a[2]-b[2])
-
-def mul(k: float, a: Vec) -> Vec:
-    return (k*a[0], k*a[1], k*a[2])
-
-def dot(a: Vec, b: Vec) -> float:
-    return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
-
-def cross(a: Vec, b: Vec) -> Vec:
-    return (
-        a[1]*b[2] - a[2]*b[1],
-        a[2]*b[0] - a[0]*b[2],
-        a[0]*b[1] - a[1]*b[0],
-    )
-
-
-def norm2(a: Vec) -> float:
-    return dot(a, a)
-
 
 def create_arrow_3d(O: Vec, V: Vec, color: str, lw: float = 2.0) -> dict:
     """Создаёт стрелку в 3D: линия от O до O+V с конусом на конце"""
-    E = add(O, V)
+    E = tuple(np.add(O, V))
 
     # Направление вектора для конуса
     V_len = (V[0]**2 + V[1]**2 + V[2]**2) ** 0.5
@@ -49,10 +26,10 @@ def create_arrow_3d(O: Vec, V: Vec, color: str, lw: float = 2.0) -> dict:
 
     # Коэффициент для размера конуса
     arrow_ratio = 0.15
-    cone_base = mul(arrow_ratio, V)
+    cone_base = tuple(np.multiply(arrow_ratio, V))
 
     # Точка основания конуса
-    cone_base_point = sub(E, cone_base)
+    cone_base_point = tuple(np.subtract(E, cone_base))
 
     # Создаём конус используя Cone в plotly
     arrow_data = {
@@ -104,26 +81,26 @@ def create_arrow_2d(O: tuple, V: tuple, color: str) -> dict:
 
 
 def intersect_ray_with_plane(P: Vec, planeRGB) -> Vec:
-    BR = sub(planeRGB[0], planeRGB[2])
-    BG = sub(planeRGB[1], planeRGB[2])
-    n = cross(BR, BG)
-    if norm2(n) < EPS:
+    BR = tuple(np.subtract(planeRGB[0], planeRGB[2]))
+    BG = tuple(np.subtract(planeRGB[1], planeRGB[2]))
+    n = tuple(np.cross(BR, BG))
+    if np.dot(n, n) < EPS:
         raise ValueError("Точки R,G,B коллинеарны: плоскость не определена.")
 
-    n_dot_P = dot(n, P)
+    n_dot_P = np.dot(n, P)
     if abs(n_dot_P) < EPS:
         raise ValueError("Луч OP параллелен плоскости: пересечения нет или их бесконечно много.")
 
-    t = dot(n, planeRGB[2]) / n_dot_P
-    return mul(t, P)
+    t = np.dot(n, planeRGB[2]) / n_dot_P
+    return tuple(np.multiply(t, P))
 
 
 def solve_in_plane_basis(BR: Vec, BG: Vec, BH: Vec) -> Tuple[float, float]:
-    aa = dot(BR, BR)
-    bb = dot(BG, BG)
-    ab = dot(BR, BG)
-    ha = dot(BH, BR)
-    hb = dot(BH, BG)
+    aa = np.dot(BR, BR)
+    bb = np.dot(BG, BG)
+    ab = np.dot(BR, BG)
+    ha = np.dot(BH, BR)
+    hb = np.dot(BH, BG)
 
     den = aa * bb - ab * ab
     if abs(den) < EPS:
@@ -240,19 +217,22 @@ def create_3d_xyz_plot(points: List[Vec], Hs, R: Vec, G: Vec, B: Vec,
     # Декомпозиция векторов
     if SHOW_DECOMPOSITION and xBR is not None and yBG is not None and BH is not None and M is not None:
         # Вектор xBR из B
-        fig.add_trace(go.Scatter3d(x=[B[0], add(B, xBR)[0]], y=[B[1], add(B, xBR)[1]],
-                                  z=[B[2], add(B, xBR)[2]], mode='lines',
+        B_xBR = tuple(np.add(B, xBR))
+        fig.add_trace(go.Scatter3d(x=[B[0], B_xBR[0]], y=[B[1], B_xBR[1]],
+                                  z=[B[2], B_xBR[2]], mode='lines',
                                   line=dict(color='red', width=3), showlegend=False))
 
         # Вектор yBG из M
-        M = add(B, xBR)
-        fig.add_trace(go.Scatter3d(x=[M[0], add(M, yBG)[0]], y=[M[1], add(M, yBG)[1]],
-                                  z=[M[2], add(M, yBG)[2]], mode='lines',
+        M = tuple(np.add(B, xBR))
+        M_yBG = tuple(np.add(M, yBG))
+        fig.add_trace(go.Scatter3d(x=[M[0], M_yBG[0]], y=[M[1], M_yBG[1]],
+                                  z=[M[2], M_yBG[2]], mode='lines',
                                   line=dict(color='green', width=3), showlegend=False))
 
         # Вектор BH из B
-        fig.add_trace(go.Scatter3d(x=[B[0], add(B, BH)[0]], y=[B[1], add(B, BH)[1]],
-                                  z=[B[2], add(B, BH)[2]], mode='lines',
+        B_BH = tuple(np.add(B, BH))
+        fig.add_trace(go.Scatter3d(x=[B[0], B_BH[0]], y=[B[1], B_BH[1]],
+                                  z=[B[2], B_BH[2]], mode='lines',
                                   line=dict(color='black', width=3), showlegend=False))
 
     # Вычисление границ для масштаба
@@ -381,12 +361,12 @@ def main():
     points = cie.get_every_n_points(n)
     wavelengths = [cie.get_L(i) for i in range(0, len(cie.cieL), n)]
     Hs = [intersect_ray_with_plane(P, planeRGB) for P in points]
-    BR = sub(R, B)
-    BG = sub(G, B)
+    BR = tuple(np.subtract(R, B))
+    BG = tuple(np.subtract(G, B))
 
     h_2d_points = []
     for H in Hs:
-        u, v = solve_in_plane_basis(BR, BG, sub(H, B))
+        u, v = solve_in_plane_basis(BR, BG, tuple(np.subtract(H, B)))
         h_2d_points.append((u, v))
 
     # Инициализация Dash приложения
@@ -455,11 +435,11 @@ def main():
         fig_cmf = create_cmf_plot(points_data, point_idx, wavelengths_data)
 
         # Расчеты для XYZ и XY plots
-        BH = sub(Hs_data[point_idx], B_data)
+        BH = tuple(np.subtract(Hs_data[point_idx], B_data))
         u, v = solve_in_plane_basis(BR_data, BG_data, BH)
-        xBR = mul(u, BR_data)
-        yBG = mul(v, BG_data)
-        M = add(B_data, xBR)
+        xBR = tuple(np.multiply(u, BR_data))
+        yBG = tuple(np.multiply(v, BG_data))
+        M = tuple(np.add(B_data, xBR))
 
         # XYZ 3D plot
         fig_xyz = create_3d_xyz_plot(
