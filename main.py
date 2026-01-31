@@ -89,20 +89,18 @@ def main():
     def update_plots(point_idx):
 
         BH = cmf_projection[point_idx] - B
-        u, v = solve_in_plane_basis(BR, BG, BH)
-
-        xBR = u * BR
-        yBG = v * BG
-        M = B + xBR
-
-        BR_2d = R_2d - B_2d
-        BG_2d = G_2d - B_2d
-        xBR_2d = u * BR_2d
-        yBG_2d = v * BG_2d
+        x, y = solve_in_plane_basis(BR, BG, BH)
 
         B_BH = B + BH
-        B_xBR = B + xBR
-        M_yBG = M + yBG
+        M = B + (x * BR)
+        B_xBR = B + (x * BR)
+        M_yBG = M + (y * BG)
+
+        # в 2d пространстве
+        BR_2d = R_2d - B_2d
+        BG_2d = G_2d - B_2d
+        xBR_2d = x * BR_2d
+        yBG_2d = y * BG_2d
 
         fig_cmf = create_cmf_plot(cmf_data, point_idx, wavelengths)
 
@@ -115,7 +113,7 @@ def main():
             h_2d_points,
             wavelengths[point_idx],
             B_2d, G_2d, R_2d,
-            BH_coords=(u, v), 
+            BH_coords=(x, y), 
             xBR=xBR_2d, 
             yBG=yBG_2d
         )
