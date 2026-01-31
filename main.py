@@ -49,8 +49,11 @@ def init_app(num_points, initial_point):
 
 def main():
     """
-    Интерактивное веб-приложение с Dash и plotly для визуализации
+    Визуализация преобразования из CMF в xyY пространство
     """
+    # 
+    # Константы
+    # 
     R = np.array([1.0, 0.0, 0.0])
     G = np.array([0.0, 1.0, 0.0])
     B = np.array([0.0, 0.0, 1.0])
@@ -64,9 +67,13 @@ def main():
     BR = R - B
     BG = G - B
 
-    # импортируем данные откликов эксперимента 31 года
+    # Импорт данных откликов эксперимента 1931 года
     wavelengths = [cie.get_L(i) for i in range(0, len(cie.cieL), n)]
     cmf_data = [np.array(p) for p in cie.get_every_n_points(n)]
+
+    # 
+    # Расчёты
+    # 
 
     # Находим проекцию каждой точки cmf_data на плоскость RGB
     cmf_projection = [intersect_ray_with_plane(point, planeRGB) for point in cmf_data]
@@ -78,6 +85,9 @@ def main():
         x, y = solve_in_plane_basis(BR, BG, BH)
         h_2d_points.append((x, y))
 
+    # 
+    # Начальная настройка визуализации
+    # 
     app = init_app(len(cmf_data), initial_point)
 
     @app.callback(
@@ -87,7 +97,9 @@ def main():
         Input('spectrum-slider', 'value')
     )
     def update_plots(point_idx):
-
+        #    
+        # Перерасчет для выбранной точки H
+        # 
         BH = cmf_projection[point_idx] - B
         x, y = solve_in_plane_basis(BR, BG, BH)
 
@@ -102,6 +114,9 @@ def main():
         xBR_2d = x * BR_2d
         yBG_2d = y * BG_2d
 
+        #    
+        # Визуализация точек и векторов
+        # 
         fig_cmf = create_cmf_plot(cmf_data, point_idx, wavelengths)
 
         fig_xyz = create_3d_xyz_plot(
