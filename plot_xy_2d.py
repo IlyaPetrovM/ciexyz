@@ -4,9 +4,7 @@ from dash import dcc, html, Input, Output
 import numpy as np
 import ciexyz31 as cie
 import csv
-
-
-EPS = 1e-12
+from geometry_utils import intersect_ray_with_plane, solve_in_plane_basis
 
 
 def read_csv_chromaticity(filename):
@@ -95,37 +93,6 @@ def calculate_and_save_differences(h_2d_points, wavelengths, csv_data, output_fi
     print(f"Разности сохранены в файл: {output_filename}")
     print(f"Обработано {count} общих точек")
     print(f"Среднее евклидово расстояние: {total_euclidean/count:.8f}")
-
-
-def intersect_ray_with_plane(P, planeRGB):
-    BR = planeRGB[0] - planeRGB[2]
-    BG = planeRGB[1] - planeRGB[2]
-    n = np.cross(BR, BG)
-    if np.dot(n, n) < EPS:
-        raise ValueError("Точки R,G,B коллинеарны: плоскость не определена.")
-
-    n_dot_P = np.dot(n, P)
-    if abs(n_dot_P) < EPS:
-        raise ValueError("Луч OP параллелен плоскости: пересечения нет или их бесконечно много.")
-
-    t = np.dot(n, planeRGB[2]) / n_dot_P
-    return t * P
-
-
-def solve_in_plane_basis(BR, BG, BH):
-    aa = np.dot(BR, BR)
-    bb = np.dot(BG, BG)
-    ab = np.dot(BR, BG)
-    ha = np.dot(BH, BR)
-    hb = np.dot(BH, BG)
-
-    den = aa * bb - ab * ab
-    if abs(den) < EPS:
-        raise ValueError("BR и BG линейно зависимы: базис на плоскости не определён.")
-
-    u = (ha * bb - hb * ab) / den
-    v = (hb * aa - ha * ab) / den
-    return u, v
 
 
 def create_2d_xy_plot(h_2d_list, selected_idx, wavelength, B, G, R,
