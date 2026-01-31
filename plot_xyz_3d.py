@@ -11,12 +11,10 @@ SHOW_DECOMPOSITION = 1
 
 
 def create_3d_xyz_plot(points, Hs, R, G, B,
-                       project_point_i: int = 0, point_idx: int = None,
-                       xBR=None, yBG=None, BH=None, M=None):
+                       point_idx: int,
+                       B_BH, B_xBR, M_yBG, M):
     """Создаёт 3D график XYZ с динамическими элементами"""
-    if point_idx is None:
-        point_idx = project_point_i
-
+ 
     Zero = (0.0, 0.0, 0.0)
     fig = go.Figure()
 
@@ -70,23 +68,17 @@ def create_3d_xyz_plot(points, Hs, R, G, B,
                                   marker=dict(size=8, color='lightblue'),
                                   showlegend=False))
 
+
     # Декомпозиция векторов
-    if SHOW_DECOMPOSITION and xBR is not None and yBG is not None and BH is not None and M is not None:
-        # Вектор xBR из B
-        B_xBR = B + xBR
+    if SHOW_DECOMPOSITION:
         fig.add_trace(go.Scatter3d(x=[B[0], B_xBR[0]], y=[B[1], B_xBR[1]],
                                   z=[B[2], B_xBR[2]], mode='lines',
                                   line=dict(color='red', width=3), showlegend=False))
-
-        # Вектор yBG из M
-        M = B + xBR
-        M_yBG = M + yBG
+        
         fig.add_trace(go.Scatter3d(x=[M[0], M_yBG[0]], y=[M[1], M_yBG[1]],
                                   z=[M[2], M_yBG[2]], mode='lines',
                                   line=dict(color='green', width=3), showlegend=False))
 
-        # Вектор BH из B
-        B_BH = B + BH
         fig.add_trace(go.Scatter3d(x=[B[0], B_BH[0]], y=[B[1], B_BH[1]],
                                   z=[B[2], B_BH[2]], mode='lines',
                                   line=dict(color='black', width=3), showlegend=False))

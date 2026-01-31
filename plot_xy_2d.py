@@ -95,11 +95,9 @@ def calculate_and_save_differences(h_2d_points, wavelengths, csv_data, output_fi
     print(f"Среднее евклидово расстояние: {total_euclidean/count:.8f}")
 
 
-def create_2d_xy_plot(h_2d_list, selected_idx, wavelength, B, G, R,
-                      BH_coords=None, xBR=None, yBG=None, point_idx=None, csv_data=None):
+def create_2d_xy_plot(h_2d_list, wavelength, B, G, R,
+                      BH_coords=None, xBR=None, yBG=None, csv_data=None):
     """Создаёт 2D XY diagram"""
-    if point_idx is None:
-        point_idx = selected_idx
 
     fig = go.Figure()
 
