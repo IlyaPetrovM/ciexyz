@@ -117,7 +117,7 @@ def main():
         #    
         # Визуализация точек и векторов
         # 
-        fig_cmf = create_cmf_plot(cmf_data, point_idx, wavelengths)
+        fig_cmf = create_cmf_plot(wavelengths, cmf_data, point_idx)
 
         fig_xyz = create_3d_xyz_plot(
             cmf_data, cmf_projection, R, G, B,

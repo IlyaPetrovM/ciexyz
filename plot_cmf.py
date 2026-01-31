@@ -5,7 +5,7 @@ import numpy as np
 import ciexyz31 as cie
 
 
-def create_cmf_plot(points, project_point_i, wavelengths):
+def create_cmf_plot(wavelengths, points, project_point_i=1):
     """Создаёт 2D график зависимости координат X,Y,Z от длины волны"""
     xs = [p[0] for p in points]
     ys = [p[1] for p in points]
